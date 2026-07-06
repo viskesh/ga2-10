@@ -1,100 +1,62 @@
-import uuid
 import time
-from collections import defaultdict, deque
+import uuid
+from collections import defaultdict
 
 from fastapi import FastAPI, Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 app = FastAPI()
 
-# ---------------------------------------------------------------------------
-# CONFIG — edit these two things before deploying
-# ---------------------------------------------------------------------------
-
+# ---------- Config (your assigned values) ----------
+ALLOWED_ORIGINS = [
+    "https://app-y17rgi.example.com"
+]
+WINDOW_SECONDS = 10
+MAX_REQUESTS = 14
 YOUR_EMAIL = "24f3002870@ds.study.iitm.ac.in"  # <-- put YOUR actual logged-in email here
 
-ALLOWED_ORIGINS = [
-    "https://app-y17rgi.example.com",   # your assigned origin (do not remove)
-    "https://exam.sanand.workers.dev/tds-2026-05-ga2",    # <-- replace with the ACTUAL exam page origin
-]
-
-RATE_LIMIT = 14        # B: max requests allowed
-WINDOW_SECONDS = 10    # per this many seconds
+client_hits = defaultdict(list)
 
 
-# ---------------------------------------------------------------------------
-# Middleware 1 — Request Context
-# ---------------------------------------------------------------------------
-
+# ---------- Middleware 1: Request context ----------
 class RequestContextMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        incoming_id = request.headers.get("X-Request-ID")
-        request_id = incoming_id if incoming_id else str(uuid.uuid4())
-
+    async def dispatch(self, request, call_next):
+        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
         request.state.request_id = request_id
-
         response = await call_next(request)
-
         response.headers["X-Request-ID"] = request_id
         return response
 
 
-# ---------------------------------------------------------------------------
-# Middleware 3 — Per-client Rate Limiting
-# (defined here, registered before context middleware below)
-# ---------------------------------------------------------------------------
-
-client_requests = defaultdict(deque)
-
+# ---------- Middleware 3: Rate limiting ----------
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request, call_next):
         client_id = request.headers.get("X-Client-Id", "anonymous")
         now = time.time()
+        client_hits[client_id] = [t for t in client_hits[client_id] if now - t < WINDOW_SECONDS]
 
-        timestamps = client_requests[client_id]
+        if len(client_hits[client_id]) >= MAX_REQUESTS:
+            return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
 
-        # Drop timestamps that have aged out of the window
-        while timestamps and now - timestamps[0] > WINDOW_SECONDS:
-            timestamps.popleft()
-
-        if len(timestamps) >= RATE_LIMIT:
-            return JSONResponse(
-                status_code=429,
-                content={"detail": "Rate limit exceeded"},
-            )
-
-        timestamps.append(now)
-
+        client_hits[client_id].append(now)
         return await call_next(request)
 
 
-# ---------------------------------------------------------------------------
-# Register middleware
-# NOTE: In Starlette, middleware added LAST runs FIRST (outermost).
-# We want CORS to wrap everything (including 429 responses), so it's
-# added last.
-# ---------------------------------------------------------------------------
-
+# Order of add_middleware: LAST added = FIRST to run on the way in.
+# We want CORS outermost, so add it LAST.
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# ---------------------------------------------------------------------------
-# Endpoint
-# ---------------------------------------------------------------------------
-
 @app.get("/ping")
 async def ping(request: Request):
-    return {
-        "email": YOUR_EMAIL,
-        "request_id": request.state.request_id,
-    }
+    return {"email": YOUR_EMAIL, "request_id": request.state.request_id}
