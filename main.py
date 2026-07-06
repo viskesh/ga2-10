@@ -17,7 +17,7 @@ YOUR_EMAIL = "24f3002870@ds.study.iitm.ac.in"  # <-- put YOUR actual logged-in e
 
 ALLOWED_ORIGINS = [
     "https://app-y17rgi.example.com",   # your assigned origin (do not remove)
-    "https://exam.sanand.workers.dev/tds-2026-05-ga2#hq-config-precedence-server",    # <-- replace with the ACTUAL exam page origin
+    "https://exam.sanand.workers.dev/tds-2026-05-ga2",    # <-- replace with the ACTUAL exam page origin
 ]
 
 RATE_LIMIT = 14        # B: max requests allowed
