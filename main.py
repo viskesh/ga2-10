@@ -10,9 +10,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 app = FastAPI()
 
 # ---------- Config (your assigned values) ----------
-ALLOWED_ORIGINS = [
-    "https://app-y17rgi.example.com"
-]
+ALLOWED_ORIGINS = "https://app-y17rgi.example.com"
+
 WINDOW_SECONDS = 10
 MAX_REQUESTS = 14
 YOUR_EMAIL = "24f3002870@ds.study.iitm.ac.in"  # <-- put YOUR actual logged-in email here
